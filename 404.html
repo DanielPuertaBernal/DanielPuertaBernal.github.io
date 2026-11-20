@@ -5,18 +5,35 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Not found · Daniel Puerta Bernal</title>
   <meta name="robots" content="noindex">
-  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#1a1b26" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#e1e2e7" media="(prefers-color-scheme: light)">
+  <script>
+    (function () {
+      var t = null;
+      try { t = localStorage.getItem("theme"); } catch (e) {}
+      if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+    })();
+  </script>
+  <link rel="icon" href="/assets/favicon.svg?v=3" type="image/svg+xml">
   <style>
-    body { margin: 0; min-height: 100svh; display: grid; place-items: center; background: #1a1b26; color: #c0caf5;
+    :root { --bg: #1a1b26; --fg: #c0caf5; --muted: #a9b1d6; --link: #7dcfff; --a: #7aa2f7; --b: #7dcfff; --c: #bb9af7; color-scheme: dark; }
+    :root[data-theme="light"] { --bg: #e1e2e7; --fg: #3257ad; --muted: #4c5a8a; --link: #006283; --a: #2159a7; --b: #006283; --c: #713eb4; color-scheme: light; }
+    @media (prefers-color-scheme: light) {
+      :root:not([data-theme]) { --bg: #e1e2e7; --fg: #3257ad; --muted: #4c5a8a; --link: #006283; --a: #2159a7; --b: #006283; --c: #713eb4; color-scheme: light; }
+    }
+    body { margin: 0; min-height: 100svh; display: grid; place-items: center; background: var(--bg); color: var(--fg);
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace; text-align: center; padding: 1rem; }
-    h1 { font-size: clamp(3rem, 12vw, 6rem); margin: 0; background: linear-gradient(110deg, #7aa2f7, #7dcfff, #bb9af7);
+    img { width: 72px; height: 72px; margin: 0 auto 1rem; display: block; }
+    h1 { font-size: clamp(3rem, 12vw, 6rem); margin: 0; background: linear-gradient(110deg, var(--a), var(--b), var(--c));
       -webkit-background-clip: text; background-clip: text; color: transparent; }
-    p { color: #a9b1d6; }
-    a { color: #7dcfff; }
+    p { color: var(--muted); }
+    a { color: var(--link); }
   </style>
 </head>
 <body>
   <main>
+    <img src="/assets/favicon.svg?v=3" alt="">
     <h1>404</h1>
     <p>❯ route not found</p>
     <p><a href="/">cd ~/home</a></p>

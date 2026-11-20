@@ -11,6 +11,38 @@
   const year = document.getElementById("year");
   if (year) year.textContent = String(new Date().getFullYear());
 
+  /* ---------- Theme toggle (Tokyo Night / Tokyo Night Day) ---------- */
+  const themeBtn = document.querySelector(".theme-toggle");
+  const favicon = document.getElementById("favicon");
+  const themeMetas = document.querySelectorAll('meta[name="theme-color"]');
+  const systemLight = window.matchMedia("(prefers-color-scheme: light)");
+  const storedTheme = () => { try { return localStorage.getItem("theme"); } catch (e) { return null; } };
+  const applyTheme = (t) => {
+    root.setAttribute("data-theme", t);
+    const next = t === "light" ? "dark" : "light";
+    if (themeBtn) themeBtn.setAttribute("aria-label", `Switch to ${next} theme`);
+    if (favicon) favicon.setAttribute("href", `assets/favicon-${t}.svg?v=3`);
+    themeMetas.forEach((m) => m.setAttribute("content", t === "light" ? "#e1e2e7" : "#1a1b26"));
+    window.dispatchEvent(new CustomEvent("themechange", { detail: t }));
+  };
+  applyTheme(root.getAttribute("data-theme") === "light" ? "light" : "dark");
+  if (themeBtn) {
+    themeBtn.addEventListener("click", () => {
+      const t = root.getAttribute("data-theme") === "light" ? "dark" : "light";
+      try { localStorage.setItem("theme", t); } catch (e) { /* private mode: theme still switches */ }
+      if (reduceMotion) { applyTheme(t); return; }
+      if (document.startViewTransition) { document.startViewTransition(() => applyTheme(t)); return; }
+      root.classList.add("theme-anim");
+      applyTheme(t);
+      setTimeout(() => root.classList.remove("theme-anim"), 500);
+    });
+  }
+  // Follow the OS setting until the visitor makes an explicit choice.
+  systemLight.addEventListener?.("change", (e) => {
+    const saved = storedTheme();
+    if (saved !== "light" && saved !== "dark") applyTheme(e.matches ? "light" : "dark");
+  });
+
   /* ---------- Nav: scrolled state, progress bar, current section ---------- */
   const nav = document.querySelector(".nav");
   const bar = document.querySelector(".progress span");
@@ -108,7 +140,7 @@
     spine = document.createElementNS(NS, "svg");
     spine.setAttribute("class", "spine");
     spine.setAttribute("aria-hidden", "true");
-    spine.innerHTML = '<defs><linearGradient id="spine-g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7aa2f7"/><stop offset="1" stop-color="#bb9af7"/></linearGradient></defs>' +
+    spine.innerHTML = '<defs><linearGradient id="spine-g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" class="brand-s0"/><stop offset="1" class="brand-s1"/></linearGradient></defs>' +
       '<path class="spine-track"/><path class="spine-ink" pathLength="1"/>';
     main.prepend(spine);
   }
@@ -339,7 +371,14 @@
   const canvas = document.getElementById("net");
   if (!canvas || reduceMotion) return;
   const ctx = canvas.getContext("2d");
-  const colors = ["122,162,247", "125,207,255", "187,154,247", "158,206,106"]; // Tokyo Night blue, cyan, purple, green
+  // Particle colors come from the active theme (--particles: "r,g,b|r,g,b|...").
+  let colors = [];
+  const readColors = () => {
+    colors = getComputedStyle(root).getPropertyValue("--particles").replace(/"/g, "").trim().split("|").filter(Boolean);
+    if (!colors.length) colors = ["122,162,247", "125,207,255", "187,154,247", "158,206,106"];
+  };
+  readColors();
+  window.addEventListener("themechange", readColors);
   let w, h, dpr, nodes = [], packets = [], running = true, raf;
   const pointer = { x: -9999, y: -9999 };
 
@@ -352,7 +391,7 @@
     nodes = Array.from({ length: count }, () => ({
       x: Math.random() * w, y: Math.random() * h,
       vx: (Math.random() - 0.5) * 0.35, vy: (Math.random() - 0.5) * 0.35,
-      r: Math.random() * 1.6 + 0.8, c: colors[(Math.random() * colors.length) | 0],
+      r: Math.random() * 1.6 + 0.8, k: (Math.random() * 4) | 0,
     }));
     packets = [];
   };
@@ -373,23 +412,24 @@
         const b = nodes[j];
         const dx = a.x - b.x, dy = a.y - b.y, d = Math.hypot(dx, dy);
         if (d < LINK) {
-          ctx.strokeStyle = `rgba(${a.c},${(1 - d / LINK) * 0.22})`;
+          ctx.strokeStyle = `rgba(${colors[a.k % colors.length]},${(1 - d / LINK) * 0.22})`;
           ctx.lineWidth = 1;
           ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
-          if (packets.length < 14 && Math.random() < 0.0006) packets.push({ a, b, t: 0, c: a.c });
+          if (packets.length < 14 && Math.random() < 0.0006) packets.push({ a, b, t: 0, k: a.k });
         }
       }
     }
     for (const n of nodes) {
-      ctx.fillStyle = `rgba(${n.c},0.85)`;
+      ctx.fillStyle = `rgba(${colors[n.k % colors.length]},0.85)`;
       ctx.beginPath(); ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2); ctx.fill();
     }
     packets = packets.filter((p) => {
       p.t += 0.02;
       if (p.t >= 1 || Math.hypot(p.a.x - p.b.x, p.a.y - p.b.y) > LINK) return false;
       const x = p.a.x + (p.b.x - p.a.x) * p.t, y = p.a.y + (p.b.y - p.a.y) * p.t;
-      ctx.fillStyle = `rgba(${p.c},1)`;
-      ctx.shadowColor = `rgba(${p.c},1)`; ctx.shadowBlur = 10;
+      const pc = colors[p.k % colors.length];
+      ctx.fillStyle = `rgba(${pc},1)`;
+      ctx.shadowColor = `rgba(${pc},1)`; ctx.shadowBlur = 10;
       ctx.beginPath(); ctx.arc(x, y, 2.2, 0, Math.PI * 2); ctx.fill();
       ctx.shadowBlur = 0;
       return true;
