@@ -6,7 +6,7 @@
   <title>Daniel Puerta Bernal · AI, Software & Infrastructure</title>
   <meta name="description" content="Portfolio of Daniel Puerta Bernal, Systems Engineering student and software developer building AI tooling, full-stack applications and Linux server infrastructure.">
   <meta name="author" content="Daniel Puerta Bernal">
-  <meta name="theme-color" content="#07090f">
+  <meta name="theme-color" content="#1a1b26">
   <meta name="color-scheme" content="dark">
   <link rel="canonical" href="https://danielpuertabernal.github.io/">
 
@@ -23,6 +23,8 @@
   <meta name="twitter:image" content="https://danielpuertabernal.github.io/assets/og.png">
 
   <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="assets/icon-32.png" sizes="32x32" type="image/png">
+  <link rel="apple-touch-icon" href="assets/icon-180.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
@@ -50,7 +52,16 @@
 
   <header class="nav" id="top">
     <a class="brand" href="#top" aria-label="Daniel Puerta Bernal, back to top">
-      <span class="brand-mark" aria-hidden="true">dp</span><span class="brand-cursor" aria-hidden="true">_</span>
+      <svg class="brand-logo" viewBox="0 0 64 64" aria-hidden="true">
+        <defs><linearGradient id="brand-g" x1="7" y1="16" x2="57" y2="48" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#7aa2f7"/><stop offset="1" stop-color="#bb9af7"/></linearGradient></defs>
+        <rect x="1" y="1" width="62" height="62" rx="14" class="brand-tile"/>
+        <g fill="none" stroke="url(#brand-g)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+          <path class="brand-stroke" pathLength="1" d="M10 19H20A13 13 0 0 1 20 45H10Z"/>
+          <path class="brand-stroke" pathLength="1" d="M41 43V19H47A7.5 7.5 0 0 1 47 34H41"/>
+        </g>
+        <circle class="brand-node" cx="41" cy="47" r="4"/>
+      </svg>
+      <span class="brand-text" aria-hidden="true">danielpuerta<span class="brand-cursor">_</span></span>
     </a>
     <button class="nav-toggle" aria-expanded="false" aria-controls="nav-links" aria-label="Open menu">
       <span></span><span></span>

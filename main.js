@@ -3,6 +3,8 @@
 
   const root = document.documentElement;
   root.classList.add("js");
+  // Fail open: if anything below throws, drop the hidden-until-revealed state.
+  window.addEventListener("error", () => root.classList.remove("js"));
   const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   /* ---------- Year ---------- */
@@ -48,8 +50,25 @@
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") setMenu(false); });
 
   /* ---------- Scroll reveal (staggered per group) ---------- */
+  // Child items load progressively after their container: list items, chips, stats, links.
+  const childGroups = [
+    [".pillar li", 0.25, 0.06],
+    [".tl-card li", 0.2, 0.06],
+    [".chips li", 0.15, 0.035],
+    [".stats li", 0.1, 0.1],
+    [".socials li", 0.1, 0.1],
+  ];
+  childGroups.forEach(([selector, base, step]) => {
+    document.querySelectorAll(selector).forEach((el) => {
+      const i = [...el.parentElement.children].indexOf(el);
+      el.classList.add("reveal", "reveal-child");
+      el.style.setProperty("--d", `${(base + Math.min(i, 12) * step).toFixed(3)}s`);
+    });
+  });
+
   const reveals = document.querySelectorAll(".reveal");
   reveals.forEach((el) => {
+    if (el.classList.contains("reveal-child")) return;
     const siblings = [...el.parentElement.children].filter((c) => c.classList.contains("reveal"));
     const i = siblings.indexOf(el);
     if (i > 0) el.style.setProperty("--d", `${Math.min(i, 6) * 0.08}s`);
@@ -142,10 +161,11 @@
     ["out", "<span class='m'>→ CI pipeline triggered (GitHub Actions)</span>"],
     ["out", "  <span class='ok'>✓</span> lint        <span class='ok'>✓</span> unit tests   <span class='ok'>✓</span> build"],
     ["cmd", "docker build -t app:latest ."],
-    ["out", "<span class='m'>  [+] Building 18.4s (12/12) FINISHED</span>"],
+    ["out", "<span class='m'>  [+] Building</span> <span class='y'>18.4s</span> <span class='m'>(12/12)</span> <span class='ok'>FINISHED</span>"],
     ["cmd", "docker stack deploy -c stack.yml app"],
     ["out", "  Updating service <span class='v'>app_api</span>   replicas <span class='c'>3/3</span>"],
     ["out", "  Updating service <span class='v'>app_web</span>   replicas <span class='c'>2/2</span>"],
+    ["out", "  <span class='o'>⚠</span> <span class='m'>rolling update, 1 task at a time</span>"],
     ["cmd", "curl -sI https://app.example.dev | head -1"],
     ["out", "  HTTP/2 <span class='ok'>200</span>  <span class='m'># via Caddy, TLS ✓</span>"],
     ["cmd", "ollama run llama3 \"summarize deploy\""],
@@ -191,7 +211,7 @@
   const canvas = document.getElementById("net");
   if (!canvas || reduceMotion) return;
   const ctx = canvas.getContext("2d");
-  const colors = ["167,139,250", "34,211,238", "74,222,128"];
+  const colors = ["122,162,247", "125,207,255", "187,154,247", "158,206,106"]; // Tokyo Night blue, cyan, purple, green
   let w, h, dpr, nodes = [], packets = [], running = true, raf;
   const pointer = { x: -9999, y: -9999 };
 
@@ -204,7 +224,7 @@
     nodes = Array.from({ length: count }, () => ({
       x: Math.random() * w, y: Math.random() * h,
       vx: (Math.random() - 0.5) * 0.35, vy: (Math.random() - 0.5) * 0.35,
-      r: Math.random() * 1.6 + 0.8, c: colors[(Math.random() * 3) | 0],
+      r: Math.random() * 1.6 + 0.8, c: colors[(Math.random() * colors.length) | 0],
     }));
     packets = [];
   };
