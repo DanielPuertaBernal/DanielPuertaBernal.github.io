@@ -388,8 +388,19 @@ h2 em { font-style: normal; background: var(--grad); -webkit-background-clip: te
 .stack-group { padding: 1.4rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
 .stack-group h3 { font-size: .85rem; font-family: var(--mono); font-weight: 400; color: var(--muted); margin-bottom: 1rem; text-transform: uppercase; letter-spacing: .08em; }
 .chips { display: flex; flex-wrap: wrap; gap: .45rem; }
-.chips li { font-size: .88rem; padding: .3rem .7rem; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--border); transition: border-color .25s, transform .25s var(--ease); }
-.chips li:hover { border-color: var(--cyan); }
+.chips li { font-size: .88rem; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--border); transition: border-color .25s, background-color .25s; }
+.chips a {
+  display: inline-flex; align-items: center; gap: .3rem; padding: .3rem .7rem; border-radius: inherit;
+  color: inherit; text-decoration: none;
+}
+.chips a::after { /* external-docs arrow, revealed on hover/focus */
+  content: "↗"; font-size: .75em; color: var(--tn-blue); opacity: 0; margin-right: -.55rem;
+  transform: translate(-3px, 2px); transition: opacity .25s, transform .3s var(--ease), margin .3s var(--ease);
+}
+.chips li:hover, .chips li:focus-within { border-color: var(--tn-blue); }
+.chips a:hover, .chips a:focus-visible { text-decoration: underline; text-decoration-color: var(--tn-blue); text-underline-offset: 3px; }
+.chips a:hover::after, .chips a:focus-visible::after { opacity: 1; margin-right: 0; transform: none; }
+.chips a:focus-visible { outline: 2px solid var(--tn-orange); outline-offset: 2px; }
 .langs { color: var(--muted); margin-top: 2rem; }
 .langs strong { color: var(--text); font-weight: 500; }
 .marquee { margin-top: 4rem; overflow: hidden; border-block: 1px solid var(--border); padding: 1.2rem 0; mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent); }
