@@ -49,22 +49,149 @@
   menu.addEventListener("click", (e) => { if (e.target.closest("a")) setMenu(false); });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") setMenu(false); });
 
-  /* ---------- Scroll reveal (staggered per group) ---------- */
-  // Child items load progressively after their container: list items, chips, stats, links.
-  const childGroups = [
-    [".pillar li", 0.25, 0.06],
-    [".tl-card li", 0.2, 0.06],
-    [".chips li", 0.15, 0.035],
-    [".stats li", 0.1, 0.1],
-    [".socials li", 0.1, 0.1],
-  ];
-  childGroups.forEach(([selector, base, step]) => {
-    document.querySelectorAll(selector).forEach((el) => {
-      const i = [...el.parentElement.children].indexOf(el);
-      el.classList.add("reveal", "reveal-child");
-      el.style.setProperty("--d", `${(base + Math.min(i, 12) * step).toFixed(3)}s`);
+  /* ---------- Scroll-built page (blueprint -> finished, tied to scroll position) ---------- */
+  const build = !reduceMotion && "requestAnimationFrame" in window;
+  const tracked = []; // { el, kind }
+  const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
+  // Deterministic pseudo-random so chips scatter the same way on every visit.
+  const rand = (n) => { const x = Math.sin(n * 12.9898) * 43758.5453; return x - Math.floor(x); };
+
+  if (build) {
+    root.classList.add("build");
+    const unreveal = (el) => el.classList.remove("reveal");
+
+    document.querySelectorAll(".pillar, .tl-card, .project, .stack-group, .stats li").forEach((card) => {
+      unreveal(card);
+      card.classList.add("bld");
+      [...card.children].forEach((child, i) => child.style.setProperty("--i", String(i)));
+      const bp = document.createElement("span"); bp.className = "bld-bp"; bp.setAttribute("aria-hidden", "true");
+      const fill = document.createElement("span"); fill.className = "bld-fill"; fill.setAttribute("aria-hidden", "true");
+      card.prepend(bp, fill);
+      tracked.push({ el: card, kind: "card" });
     });
+    document.querySelectorAll(".stats").forEach(unreveal);
+    document.querySelectorAll(".pillar li").forEach((li, i, all) => {
+      li.classList.add("pillar-list-item");
+      li.style.setProperty("--i", String([...li.parentElement.children].indexOf(li)));
+    });
+    document.querySelectorAll(".tl-card li").forEach((li) => {
+      li.classList.add("tl-li");
+      li.style.setProperty("--i", String([...li.parentElement.children].indexOf(li)));
+    });
+    document.querySelectorAll(".chips li").forEach((li, n) => {
+      const i = [...li.parentElement.children].indexOf(li);
+      li.style.setProperty("--i", String(i));
+      li.style.setProperty("--dx", `${Math.round((rand(n + 1) - 0.5) * 80)}px`);
+      li.style.setProperty("--dy", `${Math.round(18 + rand(n + 7) * 40)}px`);
+      li.style.setProperty("--rot", `${Math.round((rand(n + 13) - 0.5) * 50)}deg`);
+    });
+    document.querySelectorAll("main .section h2, main .section .kicker").forEach((h) => {
+      unreveal(h);
+      h.classList.add("bld-h");
+      tracked.push({ el: h, kind: "heading" });
+    });
+    document.querySelectorAll("main .section > .container").forEach((c) => {
+      const rule = document.createElement("span");
+      rule.className = "bld-rule"; rule.setAttribute("aria-hidden", "true");
+      c.before(rule); // sibling, so grid containers (About) keep their columns
+      tracked.push({ el: rule, kind: "rule" });
+    });
+    document.querySelectorAll(".tl-item").forEach((el) => tracked.push({ el, kind: "dot" }));
+    document.querySelectorAll(".timeline").forEach((el) => tracked.push({ el, kind: "timeline" }));
+  }
+
+  // Page spine: dashed track + gradient ink drawn by overall scroll progress, one node per section.
+  const main = document.getElementById("main");
+  let spine = null;
+  if (build) {
+    const NS = "http://www.w3.org/2000/svg";
+    spine = document.createElementNS(NS, "svg");
+    spine.setAttribute("class", "spine");
+    spine.setAttribute("aria-hidden", "true");
+    spine.innerHTML = '<defs><linearGradient id="spine-g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7aa2f7"/><stop offset="1" stop-color="#bb9af7"/></linearGradient></defs>' +
+      '<path class="spine-track"/><path class="spine-ink" pathLength="1"/>';
+    main.prepend(spine);
+  }
+  let spineNodes = [];
+  const layoutSpine = () => {
+    if (!spine) return;
+    const h = main.offsetHeight;
+    spine.setAttribute("viewBox", `0 0 24 ${h}`);
+    const d = `M12 ${Math.round(window.innerHeight * 0.9)} V${h - 40}`;
+    spine.querySelector(".spine-track").setAttribute("d", d);
+    // gradientUnits default (objectBoundingBox) needs width > 0, so nudge the ink path
+    spine.querySelector(".spine-ink").setAttribute("d", `${d} h0.01`);
+    spineNodes.forEach((n) => n.c.remove());
+    spineNodes = [...main.querySelectorAll(".section")].map((sec) => {
+      const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      const y = sec.offsetTop + 90;
+      c.setAttribute("cx", "12"); c.setAttribute("cy", String(y)); c.setAttribute("r", "5");
+      spine.appendChild(c);
+      return { c, y, on: false };
+    });
+  };
+
+  const values = new WeakMap();
+  const set = (el, prop, v) => {
+    const key = prop + "|";
+    const prev = values.get(el) || {};
+    if (prev[key] !== undefined && Math.abs(prev[key] - v) < 0.002) return;
+    prev[key] = v; values.set(el, prev);
+    el.style.setProperty(prop, v.toFixed(3));
+  };
+
+  let buildQueued = false;
+  const updateBuild = () => {
+    buildQueued = false;
+    const vh = window.innerHeight;
+    // Read every rect first, then write, so the frame does a single layout pass.
+    const rects = tracked.map(({ el }) => el.getBoundingClientRect());
+    tracked.forEach(({ el, kind }, k) => {
+      const r = rects[k];
+      if (kind === "timeline") {
+        set(el, "--tp", clamp01((vh * 0.75 - r.top) / Math.max(r.height, 1)));
+      } else if (kind === "heading") {
+        set(el, "--p", clamp01((vh * 0.92 - r.top) / (vh * 0.3)));
+      } else {
+        set(el, "--p", clamp01((vh * 0.98 - r.top) / (vh * 0.5)));
+      }
+    });
+    if (spine) {
+      const max = document.documentElement.scrollHeight - vh;
+      const prog = max > 0 ? clamp01(window.scrollY / max) : 1;
+      spine.querySelector(".spine-ink").style.strokeDashoffset = String(1 - prog);
+      const mark = window.scrollY - main.offsetTop + vh * 0.6;
+      spineNodes.forEach((n) => {
+        const on = mark > n.y;
+        if (on !== n.on) { n.on = on; n.c.classList.toggle("is-on", on); }
+      });
+    }
+  };
+  const queueBuild = () => { if (!buildQueued) { buildQueued = true; requestAnimationFrame(updateBuild); } };
+  if (build) {
+    layoutSpine();
+    updateBuild();
+    window.addEventListener("scroll", queueBuild, { passive: true });
+    window.addEventListener("resize", () => { layoutSpine(); queueBuild(); });
+    window.addEventListener("load", () => { layoutSpine(); queueBuild(); });
+  }
+
+  // Remaining reveal elements (paragraphs, filters, links) keep the one-shot fade/slide.
+  document.querySelectorAll(".socials li").forEach((el) => {
+    const i = [...el.parentElement.children].indexOf(el);
+    el.classList.add("reveal", "reveal-child");
+    el.style.setProperty("--d", `${(0.1 + i * 0.1).toFixed(2)}s`);
   });
+  if (!build) {
+    [[".pillar li", 0.25, 0.06], [".tl-card li", 0.2, 0.06], [".chips li", 0.15, 0.035], [".stats li", 0.1, 0.1]]
+      .forEach(([selector, base, step]) => {
+        document.querySelectorAll(selector).forEach((el) => {
+          const i = [...el.parentElement.children].indexOf(el);
+          el.classList.add("reveal", "reveal-child");
+          el.style.setProperty("--d", `${(base + Math.min(i, 12) * step).toFixed(3)}s`);
+        });
+      });
+  }
 
   const reveals = document.querySelectorAll(".reveal");
   reveals.forEach((el) => {
@@ -126,6 +253,7 @@
         b.classList.toggle("is-active", active);
         b.setAttribute("aria-pressed", String(active));
       });
+      requestAnimationFrame(() => { layoutSpine(); queueBuild(); });
       projects.forEach((p, i) => {
         const show = f === "all" || p.dataset.tags.split(" ").includes(f);
         p.classList.toggle("is-hidden", !show);
