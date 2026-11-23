@@ -32,7 +32,7 @@
   --grid-line: rgba(65, 72, 104, 0.22);
   --nav-bg: rgba(22, 22, 30, 0.78);
   --menu-bg: rgba(22, 22, 30, 0.97);
-  --term-bg: rgba(22, 22, 30, 0.88);
+  --term-bg: rgba(22, 22, 30, 0.94);
   --shadow-lg: rgba(0, 0, 0, 0.8);
   --glow-1: rgba(187, 154, 247, 0.22);
   --glow-2: rgba(125, 207, 255, 0.16);
@@ -75,7 +75,7 @@
   --grid-line: rgba(168, 174, 203, 0.24);
   --nav-bg: rgba(225, 226, 231, 0.8);
   --menu-bg: rgba(225, 226, 231, 0.97);
-  --term-bg: rgba(233, 233, 236, 0.92);
+  --term-bg: rgba(233, 233, 236, 0.96);
   --shadow-lg: rgba(55, 96, 191, 0.28);
   --glow-1: rgba(152, 84, 241, 0.16);
   --glow-2: rgba(46, 125, 233, 0.14);
@@ -111,7 +111,7 @@
   --grid-line: rgba(168, 174, 203, 0.24);
   --nav-bg: rgba(225, 226, 231, 0.8);
   --menu-bg: rgba(225, 226, 231, 0.97);
-  --term-bg: rgba(233, 233, 236, 0.92);
+  --term-bg: rgba(233, 233, 236, 0.96);
   --shadow-lg: rgba(55, 96, 191, 0.28);
   --glow-1: rgba(152, 84, 241, 0.16);
   --glow-2: rgba(46, 125, 233, 0.14);
@@ -152,10 +152,10 @@ body::before { /* subtle grid */
   pointer-events: none;
   z-index: -1;
   background-image:
+    radial-gradient(ellipse at 50% 0%, transparent 30%, var(--bg) 75%),
     linear-gradient(var(--grid-line) 1px, transparent 1px),
     linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
-  background-size: 56px 56px;
-  mask-image: radial-gradient(ellipse at 50% 0%, #000 30%, transparent 75%);
+  background-size: 100% 100%, 56px 56px, 56px 56px;
 }
 img, svg, canvas { display: block; max-width: 100%; }
 a { color: inherit; }
@@ -252,7 +252,8 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   font-family: var(--mono); font-size: .8rem; color: var(--muted);
   padding: .4rem .85rem; border: 1px solid var(--border); border-radius: 999px; background: var(--surface);
 }
-.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 0 rgba(158,206,106,.6); animation: pulse 2.2s infinite; }
+.dot { position: relative; width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
+.dot::after { content: ""; position: absolute; inset: 0; border-radius: 50%; background: var(--green); animation: pulse 2.2s ease-out infinite; }
 .hero-hello { display: block; font-size: clamp(1.1rem, 2vw, 1.35rem); font-weight: 500; color: var(--muted); margin-bottom: .4rem; letter-spacing: 0; }
 .hero-name {
   display: block; font-size: clamp(2.6rem, 7vw, 5.2rem); font-weight: 700; letter-spacing: -0.04em;
@@ -277,7 +278,7 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 /* TERMINAL */
 .terminal {
   border-radius: var(--radius); border: 1px solid var(--border);
-  background: var(--term-bg); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  background: var(--term-bg);
   box-shadow: 0 30px 80px -30px var(--shadow-lg), 0 0 0 1px rgba(187,154,247,.06) inset;
   overflow: hidden; transform: perspective(1200px) rotateY(-6deg) rotateX(3deg);
   transition: transform .8s var(--ease);
@@ -437,7 +438,7 @@ h2 em { font-style: normal; background: var(--grad); -webkit-background-clip: te
 
 @keyframes draw { to { stroke-dashoffset: 0; } }
 @keyframes blink { 50% { opacity: 0; } }
-@keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(158,206,106,.55); } 70% { box-shadow: 0 0 0 10px rgba(158,206,106,0); } 100% { box-shadow: 0 0 0 0 rgba(158,206,106,0); } }
+@keyframes pulse { 0% { transform: scale(1); opacity: .6; } 70%, 100% { transform: scale(3.4); opacity: 0; } }
 @keyframes rise { from { opacity: 0; transform: translateY(24px); } }
 @keyframes drift { to { transform: translate3d(3%, 4%, 0) scale(1.06); } }
 @keyframes wheel { 0% { opacity: 0; transform: translateY(0); } 30% { opacity: 1; } 100% { opacity: 0; transform: translateY(14px); } }
@@ -539,16 +540,43 @@ h2 em { font-style: normal; background: var(--grad); -webkit-background-clip: te
 .build .tl-item::before { transform: scale(var(--p, 1)); }
 
 /* page spine: an SVG connector drawn by scroll progress (wide screens only) */
-.spine { display: none; }
+.spine, .spine-ink-bar { display: none; }
 @media (min-width: 1280px) {
   .build .spine { display: block; position: absolute; left: 28px; top: 0; width: 24px; height: 100%; pointer-events: none; z-index: 1; }
   .spine path { fill: none; stroke-width: 2; }
   .spine .spine-track { stroke: var(--spine-track); stroke-dasharray: 4 6; }
-  .spine .spine-ink { stroke: url(#spine-g); stroke-dasharray: 1; }
+  .build .spine-ink-bar { display: block; position: absolute; left: 39px; width: 2px; z-index: 1; pointer-events: none;
+    background: linear-gradient(var(--tn-blue), var(--tn-purple)); transform-origin: 50% 0; transform: scaleY(var(--sp, 0)); }
   .spine circle { fill: var(--tn-bg); stroke: var(--tn-comment); stroke-width: 2; transition: stroke .3s, fill .3s; }
   .spine circle.is-on { fill: var(--tn-blue); stroke: var(--tn-purple); }
 }
 main { position: relative; }
+
+/* decorative loops stop while their section is off-screen (class set by main.js) */
+.is-offscreen .hero-glow, .is-offscreen .dot::after, .is-offscreen .caret, .is-offscreen .scroll-hint span,
+.marquee.is-offscreen .marquee-track { animation-play-state: paused; }
+
+
+/* GECKO (Firefox, Zen): backdrop-filter and animated clip-path repaint large areas on every
+   scroll frame there, so use solid translucent bars and opacity/transform-based building. */
+/* A fixed full-viewport gradient layer behind scrolling content is repainted on every scroll
+   frame in Gecko (~45ms/frame measured in Zen at 1440px). Its radial fade only shows the grid
+   near the top, so there it scrolls away with the hero instead of staying fixed. */
+.gecko body::before { position: absolute; bottom: auto; height: 100vh; }
+.gecko .nav.is-scrolled { backdrop-filter: none; -webkit-backdrop-filter: none; background: var(--menu-bg); }
+.gecko .nav-links { backdrop-filter: none; -webkit-backdrop-filter: none; }
+.gecko.build .bld-fill { clip-path: none; opacity: var(--p, 1); transform: scale(calc(.96 + .04 * var(--p, 1))); }
+.gecko .rotator-word.is-out { filter: none; }
+/* the marquee fades its edges with overlays instead of a mask over moving text */
+.gecko .marquee { mask-image: none; position: relative; }
+.gecko .marquee::before, .gecko .marquee::after {
+  content: ""; position: absolute; top: 0; bottom: 0; width: 10%; z-index: 1; pointer-events: none;
+}
+.gecko .marquee::before { left: 0; background: linear-gradient(90deg, var(--bg), transparent); }
+.gecko .marquee::after { right: 0; background: linear-gradient(-90deg, var(--bg), transparent); }
+.gecko.build h2.bld-h, .gecko.build .kicker.bld-h {
+  clip-path: none; opacity: var(--p, 1); transform: translateX(calc((1 - var(--p, 1)) * -24px));
+}
 
 /* RESPONSIVE */
 @media (max-width: 960px) {

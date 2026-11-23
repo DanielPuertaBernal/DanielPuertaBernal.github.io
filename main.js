@@ -46,12 +46,19 @@
   /* ---------- Nav: scrolled state, progress bar, current section ---------- */
   const nav = document.querySelector(".nav");
   const bar = document.querySelector(".progress span");
-  let ticking = false;
+  let ticking = false, scrolled = null;
+  // Scrollable height is cached (resize/load) so this rAF callback only writes.
+  let maxScroll = 1;
+  const measureMax = () => { maxScroll = Math.max(1, document.documentElement.scrollHeight - window.innerHeight); };
+  measureMax();
+  window.addEventListener("resize", measureMax, { passive: true });
+  window.addEventListener("load", measureMax);
+  if ("ResizeObserver" in window) new ResizeObserver(measureMax).observe(document.body);
   const onScroll = () => {
     const y = window.scrollY;
-    const max = document.documentElement.scrollHeight - window.innerHeight;
-    nav.classList.toggle("is-scrolled", y > 24);
-    if (bar) bar.style.transform = `scaleX(${max > 0 ? Math.min(y / max, 1) : 0})`;
+    const isScrolled = y > 24;
+    if (isScrolled !== scrolled) { scrolled = isScrolled; nav.classList.toggle("is-scrolled", isScrolled); }
+    if (bar) bar.style.transform = `scaleX(${Math.min(y / maxScroll, 1).toFixed(4)})`;
     ticking = false;
   };
   window.addEventListener("scroll", () => {
@@ -134,25 +141,33 @@
 
   // Page spine: dashed track + gradient ink drawn by overall scroll progress, one node per section.
   const main = document.getElementById("main");
-  let spine = null;
+  let spine = null, spineInk = null;
   if (build) {
     const NS = "http://www.w3.org/2000/svg";
     spine = document.createElementNS(NS, "svg");
     spine.setAttribute("class", "spine");
     spine.setAttribute("aria-hidden", "true");
-    spine.innerHTML = '<defs><linearGradient id="spine-g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" class="brand-s0"/><stop offset="1" class="brand-s1"/></linearGradient></defs>' +
-      '<path class="spine-track"/><path class="spine-ink" pathLength="1"/>';
-    main.prepend(spine);
+    spine.innerHTML = '<path class="spine-track"/>';
+    // The ink is a plain element scaled with transform: cheap to update every frame,
+    // unlike stroke-dashoffset on a page-tall SVG, which repaints it.
+    spineInk = document.createElement("div");
+    spineInk.className = "spine-ink-bar";
+    spineInk.setAttribute("aria-hidden", "true");
+    main.prepend(spine, spineInk);
   }
   let spineNodes = [];
+  // Geometry that only changes on resize/load/filter, cached so the scroll path never forces layout.
+  const geo = { maxScroll: 1, mainTop: 0 };
   const layoutSpine = () => {
+    geo.maxScroll = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
+    geo.mainTop = main.offsetTop;
     if (!spine) return;
     const h = main.offsetHeight;
+    const top = Math.round(window.innerHeight * 0.9), bottom = h - 40;
     spine.setAttribute("viewBox", `0 0 24 ${h}`);
-    const d = `M12 ${Math.round(window.innerHeight * 0.9)} V${h - 40}`;
-    spine.querySelector(".spine-track").setAttribute("d", d);
-    // gradientUnits default (objectBoundingBox) needs width > 0, so nudge the ink path
-    spine.querySelector(".spine-ink").setAttribute("d", `${d} h0.01`);
+    spine.querySelector(".spine-track").setAttribute("d", `M12 ${top} V${bottom}`);
+    spineInk.style.top = `${top}px`;
+    spineInk.style.height = `${Math.max(0, bottom - top)}px`;
     spineNodes.forEach((n) => n.c.remove());
     spineNodes = [...main.querySelectorAll(".section")].map((sec) => {
       const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
@@ -165,34 +180,35 @@
 
   const values = new WeakMap();
   const set = (el, prop, v) => {
-    const key = prop + "|";
     const prev = values.get(el) || {};
-    if (prev[key] !== undefined && Math.abs(prev[key] - v) < 0.002) return;
-    prev[key] = v; values.set(el, prev);
+    if (prev[prop] !== undefined && Math.abs(prev[prop] - v) < 0.002) return;
+    prev[prop] = v; values.set(el, prev);
     el.style.setProperty(prop, v.toFixed(3));
   };
+  const progress = (kind, r, vh) => {
+    if (kind === "timeline") return clamp01((vh * 0.75 - r.top) / Math.max(r.height, 1));
+    if (kind === "heading") return clamp01((vh * 0.92 - r.top) / (vh * 0.3));
+    return clamp01((vh * 0.98 - r.top) / (vh * 0.5));
+  };
+  const apply = (t, r, vh) => set(t.el, t.kind === "timeline" ? "--tp" : "--p", progress(t.kind, r, vh));
+
+  // Only elements near the viewport are measured each frame; IntersectionObserver keeps that set.
+  const active = new Set();
+  const byEl = new Map(tracked.map((t) => [t.el, t]));
+  let vhCache = window.innerHeight;
 
   let buildQueued = false;
   const updateBuild = () => {
     buildQueued = false;
-    const vh = window.innerHeight;
+    const vh = vhCache;
+    const list = [...active];
     // Read every rect first, then write, so the frame does a single layout pass.
-    const rects = tracked.map(({ el }) => el.getBoundingClientRect());
-    tracked.forEach(({ el, kind }, k) => {
-      const r = rects[k];
-      if (kind === "timeline") {
-        set(el, "--tp", clamp01((vh * 0.75 - r.top) / Math.max(r.height, 1)));
-      } else if (kind === "heading") {
-        set(el, "--p", clamp01((vh * 0.92 - r.top) / (vh * 0.3)));
-      } else {
-        set(el, "--p", clamp01((vh * 0.98 - r.top) / (vh * 0.5)));
-      }
-    });
-    if (spine) {
-      const max = document.documentElement.scrollHeight - vh;
-      const prog = max > 0 ? clamp01(window.scrollY / max) : 1;
-      spine.querySelector(".spine-ink").style.strokeDashoffset = String(1 - prog);
-      const mark = window.scrollY - main.offsetTop + vh * 0.6;
+    const rects = list.map((t) => t.el.getBoundingClientRect());
+    list.forEach((t, k) => apply(t, rects[k], vh));
+    const y = window.scrollY;
+    if (spineInk) {
+      spineInk.style.setProperty("--sp", clamp01(y / geo.maxScroll).toFixed(4));
+      const mark = y - geo.mainTop + vh * 0.6;
       spineNodes.forEach((n) => {
         const on = mark > n.y;
         if (on !== n.on) { n.on = on; n.c.classList.toggle("is-on", on); }
@@ -200,12 +216,50 @@
     }
   };
   const queueBuild = () => { if (!buildQueued) { buildQueued = true; requestAnimationFrame(updateBuild); } };
+  const fullUpdate = () => {
+    vhCache = window.innerHeight;
+    const rects = tracked.map((t) => t.el.getBoundingClientRect());
+    tracked.forEach((t, k) => apply(t, rects[k], vhCache));
+    queueBuild();
+  };
   if (build) {
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach((e) => {
+        const t = byEl.get(e.target);
+        if (e.isIntersecting) active.add(t);
+        else { active.delete(t); apply(t, e.boundingClientRect, vhCache); } // settle on exit
+      });
+      queueBuild();
+    }, { rootMargin: "25% 0px 25% 0px" });
+    tracked.forEach((t) => io.observe(t.el));
     layoutSpine();
-    updateBuild();
-    window.addEventListener("scroll", queueBuild, { passive: true });
-    window.addEventListener("resize", () => { layoutSpine(); queueBuild(); });
-    window.addEventListener("load", () => { layoutSpine(); queueBuild(); });
+    fullUpdate();
+    // After scrolling stops, settle everything once (covers cards skipped by Home/End jumps).
+    let settleTimer = 0;
+    window.addEventListener("scroll", () => {
+      queueBuild();
+      clearTimeout(settleTimer);
+      settleTimer = setTimeout(fullUpdate, 180);
+    }, { passive: true });
+    window.addEventListener("resize", () => { layoutSpine(); fullUpdate(); }, { passive: true });
+    window.addEventListener("load", () => { layoutSpine(); fullUpdate(); });
+    // Late fonts/images change the page height; refresh the cached geometry once per frame at most.
+    if ("ResizeObserver" in window) {
+      let relayoutQueued = false;
+      new ResizeObserver(() => {
+        if (relayoutQueued) return;
+        relayoutQueued = true;
+        requestAnimationFrame(() => { relayoutQueued = false; layoutSpine(); fullUpdate(); });
+      }).observe(main);
+    }
+  }
+
+  // Infinite decorative animations (hero glow, marquee) pause while off-screen.
+  if ("IntersectionObserver" in window) {
+    const idle = new IntersectionObserver((entries) => {
+      entries.forEach((e) => e.target.classList.toggle("is-offscreen", !e.isIntersecting));
+    });
+    document.querySelectorAll(".hero, .marquee").forEach((el) => idle.observe(el));
   }
 
   // Remaining reveal elements (paragraphs, filters, links) keep the one-shot fade/slide.
@@ -285,7 +339,7 @@
         b.classList.toggle("is-active", active);
         b.setAttribute("aria-pressed", String(active));
       });
-      requestAnimationFrame(() => { layoutSpine(); queueBuild(); });
+      requestAnimationFrame(() => { layoutSpine(); if (build) fullUpdate(); });
       projects.forEach((p, i) => {
         const show = f === "all" || p.dataset.tags.split(" ").includes(f);
         p.classList.toggle("is-hidden", !show);
@@ -370,7 +424,8 @@
   /* ---------- Hero network canvas ---------- */
   const canvas = document.getElementById("net");
   if (!canvas || reduceMotion) return;
-  const ctx = canvas.getContext("2d");
+  const ctx = canvas.getContext("2d", { alpha: true });
+  const lowPower = root.classList.contains("gecko") || (navigator.hardwareConcurrency || 8) <= 4;
   // Particle colors come from the active theme (--particles: "r,g,b|r,g,b|...").
   let colors = [];
   const readColors = () => {
@@ -383,11 +438,12 @@
   const pointer = { x: -9999, y: -9999 };
 
   const resize = () => {
-    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    dpr = Math.min(window.devicePixelRatio || 1, 1.5);
     w = canvas.clientWidth; h = canvas.clientHeight;
     canvas.width = w * dpr; canvas.height = h * dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const count = Math.round(Math.min(90, Math.max(30, (w * h) / 16000)));
+    const cap = lowPower ? 50 : 90;
+    const count = Math.round(Math.min(cap, Math.max(24, (w * h) / (lowPower ? 26000 : 16000))));
     nodes = Array.from({ length: count }, () => ({
       x: Math.random() * w, y: Math.random() * h,
       vx: (Math.random() - 0.5) * 0.35, vy: (Math.random() - 0.5) * 0.35,
@@ -396,7 +452,7 @@
     packets = [];
   };
 
-  const LINK = 140;
+  const LINK = lowPower ? 120 : 140;
   const frame = () => {
     ctx.clearRect(0, 0, w, h);
     for (const n of nodes) {
@@ -428,10 +484,11 @@
       if (p.t >= 1 || Math.hypot(p.a.x - p.b.x, p.a.y - p.b.y) > LINK) return false;
       const x = p.a.x + (p.b.x - p.a.x) * p.t, y = p.a.y + (p.b.y - p.a.y) * p.t;
       const pc = colors[p.k % colors.length];
+      // soft halo drawn as a faint disc: shadowBlur is very expensive per frame
+      ctx.fillStyle = `rgba(${pc},0.18)`;
+      ctx.beginPath(); ctx.arc(x, y, 6, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = `rgba(${pc},1)`;
-      ctx.shadowColor = `rgba(${pc},1)`; ctx.shadowBlur = 10;
       ctx.beginPath(); ctx.arc(x, y, 2.2, 0, Math.PI * 2); ctx.fill();
-      ctx.shadowBlur = 0;
       return true;
     });
     if (running) raf = requestAnimationFrame(frame);
@@ -454,6 +511,13 @@
     else if (!should && running) { running = false; cancelAnimationFrame(raf); }
   };
   new IntersectionObserver(([e]) => { inView = e.isIntersecting; sync(); }).observe(canvas);
+  // Skip canvas drawing while the page is actively scrolling, so scroll frames stay cheap.
+  let scrollIdle = 0;
+  window.addEventListener("scroll", () => {
+    if (running) { running = false; cancelAnimationFrame(raf); }
+    clearTimeout(scrollIdle);
+    scrollIdle = setTimeout(sync, 140);
+  }, { passive: true });
   document.addEventListener("visibilitychange", sync);
   raf = requestAnimationFrame(frame);
 })();
